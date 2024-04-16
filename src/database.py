@@ -4,7 +4,6 @@ from sqlalchemy.ext.declarative import declarative_base
 
 from config import DATABASE_URL
 
-# aiomysql -> 비동기 지원
 engine = create_async_engine(DATABASE_URL, echo=True) # echo -> 내부에서 어떻게 동작하는지 확인용. 디버깅
 
 AsyncSessionLocal = sessionmaker(
