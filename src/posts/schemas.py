@@ -28,7 +28,7 @@ class Post(BaseModel):
     view_count: int
 
 class PostsReponse(BaseModel):
-    Posts: list[str]
+    Posts: list[Post]
 
 class PostDetailReponse(BaseModel):
     title: str
