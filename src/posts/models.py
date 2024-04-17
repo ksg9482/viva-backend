@@ -23,7 +23,7 @@ class Post(Base):
     title: str = Column(String(100), unique=True, index=True)
     content: str = Column(String(1000))
     created_at: DateTime = Column(DateTime, server_default=func.now(),  nullable=False)
-    updated_at: DateTime = Column(DateTime, onupdate=func.now())
+    updated_at: DateTime = Column(DateTime, server_default=func.now(), onupdate=func.now())
 
     user_id = Column(Integer, ForeignKey('users.id'))
     user = relationship("User", back_populates="posts")
