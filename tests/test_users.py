@@ -83,6 +83,7 @@ async def test_signup_password_special():
         }
         response = await ac.post("/users/signup", json=signup_user)
         status_code = response.status_code
+        print(response)
         response_content = response.json()
         assert status_code == 422
         assert response_content['detail'][0]['msg'] == 'Value error, Password must contain at least one lower character, one upper character, one special symbol', "비밀번호는 특수문자를 하나 이상 포함하지 않으면 에러가 발생해야 한다."
@@ -112,32 +113,68 @@ async def test_login_password():
         assert response.status_code == 500
         assert response.json() == {}, "정확한 비밀번호를 입력해야 한다."
 
+
+@pytest.fixture # 이거 결국 로그인으로 해야 토큰 얻을듯?
+async def signup_user() -> dict:
+    async with AsyncClient(base_url=BASE_URL) as ac:
+        signup_user = {
+            "username":"test_user_name",
+            "email":"test_email@test.com",
+            "password":"test_Password_1!",
+        }
+        signup_response = await ac.post("/users/signup", json=signup_user)
+        return dict(signup_response.json())
+    
 # 회원정보 수정
 @pytest.mark.users
 @pytest.mark.user_edit
-async def test_user_edit():
+async def test_user_edit(signup_user):
     async with AsyncClient(base_url=BASE_URL) as ac:
-        user_id = 1
-        response = await ac.put(f"/users/{user_id}/edit")
+        created_user:dict = await signup_user
+        user_id = created_user.get('id')
+
+        user_edit_content = {
+            "password":"test_Password_1!",
+            "username":"test_user_name",
+            "new_password":"test_Password_2!"
+        }
+        response = await ac.put(f"/users/{user_id}/edit", json=user_edit_content)
+        
         assert response.status_code == 200, "상태코드 200을 반환해야 한다"
-        assert response.json() == {}
+        assert response.json() == {
+            "email":"test_email@test.com", # id가 좋을까??
+            "username":"test_user_name",
+        }, "수정된 정보를 반환해야 한다."
 
 @pytest.mark.users
 @pytest.mark.user_edit
-async def test_user_edit_id():
+async def test_user_edit_id(signup_user):
     async with AsyncClient(base_url=BASE_URL) as ac:
-        user_id = 1
+        created_user:dict = await signup_user
+
+        user_id = created_user.get('id')
+
         response = await ac.put(f"/users/{user_id}/edit")
         assert response.status_code == 500
         assert response.json() == {}, "가입한 아이디로 수정해야 한다."
 
 @pytest.mark.users
 @pytest.mark.user_edit
-async def test_user_edit_password():
+async def test_user_edit_short_password(signup_user):
     async with AsyncClient(base_url=BASE_URL) as ac:
-        user_id = 1
-        response = await ac.put(f"/users/{user_id}/edit")
-        assert response.status_code == 500
-        assert response.json() == {}, "변경할 비밀번호가 8자 이상이어야 한다."
+        created_user:dict = await signup_user
+
+        user_id = created_user.get('id')
+        user_edit_content = {
+            "password":"test_Password_1!",
+            "username":"test_user_name",
+            "new_password":"1234567"
+        }
+        response = await ac.put(f"/users/{user_id}/edit", json=user_edit_content)
+        response_content = response.json()
+
+        assert response.status_code == 422, "상태코드 200을 반환해야 한다"
+        assert response_content['detail'][0]['msg'] == 'String should have at least 8 characters', "비밀번호는 8자 미만이면 에러가 발생해야 한다."
+        # assert response_content['detail'][0]['msg'] == 'Value error, Password must contain at least one lower character, one upper character, one special symbol', "변경할 비밀번호가 8자 이상, 대문자 1개 이상, 소문자 1개 이상, 특수문자 1개 이상을 준수하지 않으면 에러가 발생한다."
 
 # 이하 비밀번호 로직

@@ -8,8 +8,8 @@ class User(Base):
     username: str = Column(String(100), unique=True, index=True)
     email: str = Column(String(200))
     password: str = Column(String(512))
-    created_at: DateTime = Column(DateTime, server_default=func.now(),  nullable=False)
-    updated_at: DateTime = Column(DateTime, onupdate=func.now())
+    created_at: DateTime = Column(DateTime, server_default=func.now(), nullable=False)
+    updated_at: DateTime = Column(DateTime, server_default=func.now(), onupdate=func.now())
     deleted_at: DateTime = Column(DateTime)
 
     posts = relationship("Post", back_populates="user")
