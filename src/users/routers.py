@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, logger
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, logger, status
 
 from users.schemas import UserEdit, UserEditResponse, UserLogin, UserLoginResponse, UserSignUp, UserSignUpResponse
 from users.services import UserService, get_user_service
@@ -10,12 +10,12 @@ from dependencies import get_db
 router = APIRouter(prefix='/users', tags=['users'])
 # service: UserService = Depends(get_user_service)
 
-@router.post('/signup', response_model=UserSignUpResponse,tags=['users'])
+@router.post('/signup', status_code=status.HTTP_201_CREATED, response_model=UserSignUpResponse,tags=['users'])
 async def signup(signup_user: UserSignUp, service: UserService = Depends(get_user_service)):
     created_user = await service.create_user_account(username=signup_user.username, email=signup_user.email, password=signup_user.password)
     return created_user
 
-@router.post('/login', response_model=UserLoginResponse, tags=['users'])
+@router.post('/login', status_code=status.HTTP_200_OK, response_model=UserLoginResponse, tags=['users'])
 async def login(response:Response, user_login:UserLogin, service: UserService = Depends(get_user_service)):
     login_tokens = await service.login(user_login.email, user_login.password)
 
@@ -23,7 +23,7 @@ async def login(response:Response, user_login:UserLogin, service: UserService = 
     response.set_cookie(key="refresh_token",value=f"Bearer {login_tokens.refresh_token}", httponly=True)
     return login_tokens
 
-@router.put('/{user_id}/edit', tags=['users'], response_model=UserEditResponse)
+@router.put('/{user_id}/edit', status_code=status.HTTP_200_OK, tags=['users'], response_model=UserEditResponse)
 async def update_user(request: Request, user_id:int, edit_user: UserEdit, service: UserService = Depends(get_user_service)):
     if user_id != request.state.user['id']:
         raise HTTPException(status_code=401, detail="유저 본인의 정보만 수정할 수 있습니다.")
