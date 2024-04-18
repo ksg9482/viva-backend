@@ -7,7 +7,6 @@ from database import Base
 class PostView(Base):
     __tablename__ = "post_view"
     id: int = Column(Integer, primary_key=True, index=True)
-    post_id: int = Column(Integer, ForeignKey('post.id'))
     view_count: int = Column(Integer, default=0)
 
     post = relationship("Post", back_populates="post_view")
@@ -20,15 +19,16 @@ class PostView(Base):
 class Post(Base):
     __tablename__ = "post"
     id: int = Column(Integer, primary_key=True, index=True)
-    title: str = Column(String(100), unique=True, index=True)
-    content: str = Column(String(1000))
-    created_at: DateTime = Column(DateTime, server_default=func.now(),  nullable=False)
+    title: str = Column(String(100), nullable=False)
+    content: str = Column(String(1000), nullable=False)
+    created_at: DateTime = Column(DateTime, server_default=func.now(), nullable=False)
     updated_at: DateTime = Column(DateTime, server_default=func.now(), onupdate=func.now())
 
     user_id = Column(Integer, ForeignKey('users.id'))
-    user = relationship("User", back_populates="posts")
+    user = relationship("User", back_populates="posts", lazy="joined")
 
-    post_view = relationship("PostView", back_populates="post")
+    post_view_id: int = Column(Integer, ForeignKey('post_view.id'))
+    post_view = relationship("PostView", back_populates="post", lazy="joined")
 
     # 비즈니스 로직
     def update_title(self, title: str):
