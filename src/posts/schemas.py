@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime
 from typing import Optional
 from pydantic import BaseModel
 
@@ -9,8 +9,8 @@ class CreatePost(BaseModel):
 class CreatePostResponse(BaseModel):
     title: str
     content: str
-    created_at: date
-    update_at: date
+    created_at: datetime
+    updated_at: datetime
 
 class EditPost(BaseModel):
     title: str
@@ -19,8 +19,8 @@ class EditPost(BaseModel):
 class EditPostResponse(BaseModel):
     title: str
     content: str
-    created_at: date
-    update_at: date
+    created_at: datetime
+    updated_at: datetime
 
 class Post(BaseModel):
     title: str
@@ -28,11 +28,11 @@ class Post(BaseModel):
     view_count: int
 
 class PostsReponse(BaseModel):
-    Posts: list[Post]
+    posts: list[Post]
 
 class PostDetailReponse(BaseModel):
     title: str
-    author: str
+    username: str
     content: str
-    created_at: date
-    update_at: date
+    created_at: datetime
+    updated_at: datetime

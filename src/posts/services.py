@@ -1,11 +1,11 @@
 from typing import Optional
-from fastapi import Depends, HTTPException
+from fastapi import Depends, HTTPException, logger
 from sqlalchemy import insert, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from dependencies import get_db
 
-from posts.models import Post
+from posts.models import Post, PostView
 from posts.repository import PostRepository, get_post_repo
 
 
@@ -19,7 +19,9 @@ class PostService:
         self.db = db
 
     async def create_post(self, user_id:int, title:str, content:str):
-        new_post = Post(user_id=user_id, title=title, content=content)
+        logger.logger.debug('create_post service')
+        new_post_view = PostView()
+        new_post = Post(user_id=user_id, title=title, content=content, post_view=new_post_view)
         created_post = await self.repo.save(new_post)
         return created_post
 

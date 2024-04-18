@@ -1,5 +1,5 @@
 from typing import Union
-from fastapi import Depends, HTTPException
+from fastapi import Depends, HTTPException, logger
 from posts.models import Post, PostView
 
 from sqlalchemy import CursorResult, insert, select, update, delete
@@ -17,7 +17,7 @@ class PostRepository:
             # 조회수 올리기
             result:CursorResult = await self.db.execute(
                 select(Post).where(Post.id == id)
-                )
+            )
             post = result.scalars().first()
             return post
         except Exception as e:
@@ -25,6 +25,7 @@ class PostRepository:
             raise Exception(detail='Post find by id fail')
 
     async def save(self, post: Post):
+        logger.logger.debug('post repository save')
         try:
             self.db.add(post)
             await self.db.commit()

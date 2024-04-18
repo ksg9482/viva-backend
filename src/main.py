@@ -18,7 +18,7 @@ import uvicorn
 async def app_lifespan(app: FastAPI):
     async with engine.begin() as conn:
         # dev일때만. 실제로는 사용하면 안됨
-        await conn.run_sync(Base.metadata.drop_all)
+        # await conn.run_sync(Base.metadata.drop_all)
 
         await conn.run_sync(Base.metadata.create_all)
     yield 
