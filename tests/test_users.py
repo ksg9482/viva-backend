@@ -29,6 +29,22 @@ async def test_signup_ok():
 
 @pytest.mark.users
 @pytest.mark.signup
+async def test_signup_duplicate():
+    async with AsyncClient(base_url=BASE_URL) as ac:
+        signup_user = {
+            "username":"test_user_name",
+            "email":"test_email@test.com",
+            "password":"test_Password_1!",
+        }
+        response = await ac.post("/users/signup", json=signup_user)
+        status_code = response.status_code
+        response_content = response.json()
+        assert status_code == 400, "중복 가입일 경우 상태코드 400을 반환해야 한다"
+        assert response_content['detail'][0]['msg'] == '이미 가입된 사용자입니다.', "중복 가입일 경우 이미 가입된 사용자임을 밝히는 예외가 발생해야 한다."
+
+
+@pytest.mark.users
+@pytest.mark.signup
 async def test_signup_password_length():
     async with AsyncClient(base_url=BASE_URL) as ac:
         signup_user = {
@@ -38,6 +54,7 @@ async def test_signup_password_length():
         }
         response = await ac.post("/users/signup", json=signup_user)
         status_code = response.status_code
+        print(response)
         response_content = response.json()
         assert status_code == 422 # validation error
         assert response_content['detail'][0]['msg'] == 'String should have at least 8 characters', "비밀번호는 8자 미만이면 에러가 발생해야 한다."
