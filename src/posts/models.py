@@ -2,8 +2,7 @@ from sqlalchemy import Column, Integer, String, Date, DateTime, ForeignKey, func
 from sqlalchemy.orm import Mapped, mapped_column, DeclarativeBase, relationship
 from database import Base
 
-# 일정시간동안 업데이트 쿼리 모아서 처리하는 등 빈번한 view_count 해소 필요
-# https://supreme-ys.tistory.com/186
+
 class PostView(Base):
     __tablename__ = "post_view"
     id: int = Column(Integer, primary_key=True, index=True)
@@ -13,7 +12,6 @@ class PostView(Base):
 
     # 비즈니스 로직
     def increase_view_count(self):
-        # 객체가 아니라 db저장된 거 처리하는게 더 좋을지도?
         self.view_count += 1
 
 class Post(Base):
@@ -22,7 +20,7 @@ class Post(Base):
     title: str = Column(String(100), nullable=False)
     content: str = Column(String(1000), nullable=False)
     created_at: DateTime = Column(DateTime, server_default=func.now(), nullable=False)
-    updated_at: DateTime = Column(DateTime, server_default=func.now(), onupdate=func.now())
+    updated_at: DateTime = Column(DateTime, onupdate=func.now())
 
     user_id = Column(Integer, ForeignKey('users.id'))
     user = relationship("User", back_populates="posts", lazy="joined")
@@ -36,6 +34,3 @@ class Post(Base):
 
     def update_content(self, content: str):
         self.content = content
-
-    # def increase_view_count_process(self):
-    #     self.post_view.increase_view_count()

@@ -1,4 +1,5 @@
-from typing import Optional
+import json
+from typing import List, Optional
 from fastapi import Depends, HTTPException, logger
 from sqlalchemy import insert, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -6,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from dependencies import get_db
 
 from posts.models import Post, PostView
-from posts.repository import PostRepository, get_post_repo
+from posts.repository import PostRepository, PostSortEnum, get_post_repo
 
 
 class PostService:
@@ -27,6 +28,9 @@ class PostService:
 
     async def update_post(self, user_id:int, post_id: int, title:str, content:str):
         post = await self.get_post(post_id)
+
+        if post.user_id != user_id:
+            raise HTTPException(status_code=401, detail='작성자 본인만 수정가능 합니다.')
 
         if title:
             post.update_title(title)
@@ -49,15 +53,24 @@ class PostService:
         await self.repo.delete(user_id, post_id)
         return post.id
 
-    async def get_posts(self):
-        posts = await self.repo.find_all()
-        return posts
+    async def get_posts(self, page: int = 1, items_per_page: int = 20, sort_option: Optional[PostSortEnum] = PostSortEnum.CREATED_AT):
+        posts = await self.repo.find_all(page, items_per_page, sort_option)
+        # dict화를 중심으로 분리할까?
+        def post_form_changer(post: Post):
+            post_dict = post.__dict__
+            post_dict['username'] = post.user.username
+            post_dict['view_count'] = post.post_view.view_count
+            return post_dict
+        return list(map(lambda post: post_form_changer(post), posts))
 
     async def get_post(self, post_id: int) -> Post:
-        post = await self.repo.find_by_id(post_id)
+        post = await self.repo.get_post_detail(post_id)
         if post is None:
             raise HTTPException(status_code=400, detail='존재하지 않는 포스트입니다.')
         
+        # 이게 맞나?
+        post.username = post.user.username
+
         return post
 
 def get_post_service(service: PostService = Depends(PostService)):
