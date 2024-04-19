@@ -1,6 +1,6 @@
 import re
 from typing import Optional
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, EmailStr
 # from email_validator import validate_email, EmailNotValidError
 # https://docs.pydantic.dev/2.0/usage/types/string_types/
 
@@ -10,7 +10,7 @@ PASSWORD_PATTERN = r"^(?=.*[a-z])(?=.*[A-Z])(?=.*[\W_]).+$" # [a-z] 소문자 �
 class UserSignUp(BaseModel):
     username: str
 
-    email: str
+    email: EmailStr
 
     password: str = Field(
         min_length=8, 
@@ -32,10 +32,10 @@ class UserSignUp(BaseModel):
 
 class UserSignUpResponse(BaseModel):
     username: str
-    email: str
+    email: EmailStr
 
 class UserLogin(BaseModel):
-    email: str
+    email: EmailStr
     password: str 
 
 class UserLoginResponse(BaseModel):
@@ -63,4 +63,4 @@ class UserEdit(BaseModel):
 
 class UserEditResponse(BaseModel):
     username: str
-    email: str
+    email: EmailStr
