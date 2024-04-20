@@ -64,3 +64,6 @@ class UserEdit(BaseModel):
 class UserEditResponse(BaseModel):
     username: str
     email: EmailStr
+
+class UserDeleteResponse(BaseModel):
+    id: int

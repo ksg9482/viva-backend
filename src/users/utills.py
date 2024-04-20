@@ -62,6 +62,3 @@ class UserUtills:
         except jwt.exceptions.InvalidTokenError as e:
             e.args = ['Invalid token']
             return e
-        
-def get_user_utills(utills: UserUtills=Depends(UserUtills)):
-    return utills
