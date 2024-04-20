@@ -1,13 +1,11 @@
 from typing import Optional
 from fastapi import Depends, HTTPException
-from sqlalchemy import insert, select
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from dependencies import get_db
-from users.dependencies import get_hashed_password, verify_password
+from users.dependencies import get_hashed_password, verify_password, get_user_repo, get_user_utills
 from users.models import User
-from users.repository import UserRepository, get_user_repo
-from users.utills import UserUtills, get_user_utills
+from users.repository import UserRepository
+from users.utills import UserUtills
 
 class JWTTokens:
     def __init__(self, access_token:str, refresh_token:str):
@@ -72,11 +70,15 @@ class UserService:
             print(e)
             raise HTTPException(status_code=500, detail='회원정보 수정이 실패했습니다. 기입한 내용을 확인해보세요')
 
-        """
-        - 회원 본인만 수정가능합니다.
-- 수정시에는 기존 비밀번호를 입력받고 유효성 검증을 해주세요
-- 사용자 이름 및 비밀번호를 수정가능합니다.
-        """
+    async def delete_user(self, user_id:int):
+        user = await self.repo.find_by_id(user_id)
+        if user is None:
+            raise HTTPException(status_code=400, detail='존재하지 않는 사용자입니다.')
+        user.set_deleted_at()
+
+        deleted_user = await self.repo.delete_soft_user(user)
+        return deleted_user
+
     async def get_user(self, id:int) -> User:
         user = await self.repo.find_by_id(id)
         if user is None:

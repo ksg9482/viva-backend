@@ -1,11 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, logger, status
-
-from users.schemas import UserEdit, UserEditResponse, UserLogin, UserLoginResponse, UserSignUp, UserSignUpResponse
+from users.schemas import UserDeleteResponse, UserEdit, UserEditResponse, UserLogin, UserLoginResponse, UserSignUp, UserSignUpResponse
 from users.services import UserService, get_user_service
-
-from sqlalchemy.ext.asyncio import AsyncSession
-
-from dependencies import get_db
 
 router = APIRouter(prefix='/users', tags=['users'])
 # service: UserService = Depends(get_user_service)
@@ -29,3 +24,10 @@ async def update_user(request: Request, edit_user: UserEdit, service: UserServic
     
     edited_user = await service.edit_user(id=user_id,password=edit_user.password, username=edit_user.username, new_password=edit_user.new_password)
     return edited_user
+
+@router.delete('/delete', status_code=status.HTTP_200_OK, tags=['users'], response_model=UserDeleteResponse)
+async def update_user(request: Request, service: UserService = Depends(get_user_service)):
+    user_id = request.state.user['id']
+    
+    deleted_user = await service.delete_user(user_id=user_id)
+    return deleted_user

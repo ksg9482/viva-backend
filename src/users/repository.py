@@ -2,9 +2,8 @@ from typing import Union
 from fastapi import Depends, HTTPException
 from users.models import User
 
-from sqlalchemy import insert, select, update, delete
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from dependencies import get_db
 
 
@@ -13,12 +12,12 @@ class UserRepository:
         self.db = db
 
     async def find_by_id(self, id: int) -> Union[User, None]:
-        result = await self.db.execute(select(User).where(User.id == id))
+        result = await self.db.execute(select(User).where(User.id == id, User.deleted_at == None))
         user = result.scalars().first()
         return user
     
     async def find_by_email(self, email: str) -> Union[User, None]:
-        result = await self.db.execute(select(User).where(User.email == email))
+        result = await self.db.execute(select(User).where(User.email == email, User.deleted_at == None))
         user = result.scalars().first()
         return user
 
@@ -41,6 +40,13 @@ class UserRepository:
         except Exception as e:
             print(e)
             raise Exception(detail='User data edit fail')
-    
-def get_user_repo(repo: UserRepository=Depends(UserRepository)):
-    return repo
+        
+    async def delete_soft_user(self, user: User):
+        try:
+            await self.db.execute(update(User).where(User.id == user.id).values(deleted_at=user.deleted_at))
+            await self.db.commit()
+            await self.db.refresh(user)
+            return user
+        except Exception as e:
+            print(e)
+            raise Exception(detail='User data sost delete fail')

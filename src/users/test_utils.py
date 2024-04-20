@@ -1,7 +1,7 @@
 from fastapi import Depends
 import jwt
 import pytest
-from utills import UserUtills, get_user_utills
+from utills import UserUtills
 
 @pytest.mark.utills
 def test_encode_access_token():
