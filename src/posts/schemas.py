@@ -1,5 +1,5 @@
-from datetime import date, datetime
-from typing import List, Optional, Union
+from datetime import datetime
+from typing import Optional
 from pydantic import BaseModel, field_serializer
 
 class CreatePost(BaseModel):
@@ -20,6 +20,9 @@ class EditPostResponse(BaseModel):
     title: str
     content: str
 
+class DeletePostResponse(BaseModel):
+    id:int
+
 class Post(BaseModel):
     id:int
     title: str
@@ -39,7 +42,7 @@ class PostDetailReponse(BaseModel):
 
     @field_serializer('updated_at', when_used='json')
     def serialize_updated_at_empty_str(updated_at: Optional[datetime]):
-        if updated_at == None:
+        if updated_at is None:
             return ""
         
         return updated_at
