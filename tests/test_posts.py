@@ -1,188 +1,201 @@
 from fastapi import HTTPException
 import pytest
-import httpx
-import asyncio
-from httpx import AsyncClient
-from config import BASE_URL
+from unittest.mock import AsyncMock
+from src.posts.services import PostService
+from src.posts.models import Post, PostSortEnum, PostView
+from src.posts.repository import PostRepository
+from src.users.models import User
 
-@pytest.fixture(scope="module") # 이거 결국 로그인으로 해야 토큰 얻을듯?
-async def signup_user():
-    async with AsyncClient(base_url=BASE_URL) as ac:
-        signup_user = {
-            "username": "test_user_name",
-            "email": "test_email@test.com",
-            "password": "test_Password_1!",
-        }
-        await ac.post("/users/signup", json=signup_user)
-        login_response = await ac.post("/users/login", json={"email": signup_user["email"], "password": signup_user["password"]})
-        login_response_content = login_response.json()
-        access_token = login_response_content['access_token']
-        signup_user['access_token'] = access_token
-        return signup_user
+@pytest.fixture
+def post_repository():
+    post_repository = PostRepository()
 
+    post_repository.save = AsyncMock()
+    post_repository.find_post_by_id = AsyncMock()
+    post_repository.get_post_detail = AsyncMock()
+    post_repository.update = AsyncMock()
+    post_repository.find_all = AsyncMock()
+    post_repository.delete = AsyncMock()
+
+    return post_repository
+
+@pytest.fixture
+def post_service(post_repository):
+    return PostService(post_repository)
+
+@pytest.mark.unit
+@pytest.mark.posts
+async def test_create_post(post_service, post_repository):
+    user_id = 1
+    title = "test_title"
+    content = "test_content"
+    new_post_view = PostView()
+    new_post = Post(user_id=user_id, title=title, content=content, post_view=new_post_view)
+
+    post_repository.save.return_value = new_post
+
+    result = await post_service.create_post(user_id, title, content)
+
+    assert result.title == "test_title", "게시글 제목이 반환되어야 한다."
+    assert result.content == "test_content", "게시글 내용이 반환되어야 한다."
+
+@pytest.mark.unit
+@pytest.mark.posts
+async def test_update_post(post_service, post_repository):
+    user_id = 1
+    post_id = 1
+    title = "updated_title"
+    content = "updated_content"
+    post = Post(user_id=user_id, title="old_title", content="old_content")
+
+    post_repository.find_post_by_id.return_value = post
+    post_repository.update.return_value = post
+
+    result = await post_service.update_post(user_id, post_id, title, content)
+
+    assert result.title == "updated_title", "수정된 게시글 제목이 반환되어야 한다."
+    assert result.content == "updated_content", "수정된 게시글 내용이 반환되어야 한다."
+
+@pytest.mark.unit
+@pytest.mark.posts
+async def test_update_post_not_exist(post_service, post_repository):
+    user_id = 1
+    post_id = 1
+    title = "updated_title"
+    content = "updated_content"
+
+    post_repository.find_post_by_id.return_value = None
+
+    with pytest.raises(HTTPException, match="400: 존재하지 않는 포스트입니다."):
+        await post_service.update_post(user_id, post_id, title, content)
+
+@pytest.mark.unit
+@pytest.mark.posts
+async def test_update_post_unauthorized(post_service, post_repository):
+    user_id = 1
+    post_id = 1
+    title = "updated_title"
+    content = "updated_content"
+    post = Post(user_id=user_id + 1, title="old_title", content="old_content")
+
+    post_repository.find_post_by_id.return_value = post
+
+    with pytest.raises(HTTPException, match="401: 작성자 본인만 수정가능 합니다."):
+        await post_service.update_post(user_id, post_id, title, content)
+
+@pytest.mark.unit
+@pytest.mark.posts
+async def test_delete_post(post_service, post_repository):
+    user_id = 1
+    post_id = 1
+    title = "deleted_test_title"
+    content = "deleted_test_content"
+    post = Post(user_id=user_id, title=title, content=content)
+
+    post_repository.find_post_by_id.return_value = post
+    post_repository.delete.return_value = post
+
+    result = await post_service.delete_post(user_id, post_id)
+
+    assert result.title == "deleted_test_title", "삭제된 게시글 제목이 반환되어야 한다."
+    assert result.content == "deleted_test_content", "삭제된 게시글 내용이 반환되어야 한다."
+
+@pytest.mark.unit
+@pytest.mark.posts
+async def test_delete_post_not_exist(post_service, post_repository):
+    user_id = 1
+    post_id = 1
+
+    post_repository.find_post_by_id.return_value = None
+
+    with pytest.raises(HTTPException, match="400: 존재하지 않는 포스트입니다."):
+        await post_service.delete_post(user_id, post_id)
+
+@pytest.mark.unit
+@pytest.mark.posts
+async def test_delete_post_unauthorized(post_service, post_repository):
+    user_id = 1
+    post_id = 1
+    title = "test_title"
+    content = "test_content"
+    post = Post(user_id=user_id + 1, title=title, content=content)
+
+    post_repository.find_post_by_id.return_value = post
+    post_repository.delete.return_value = post
+
+    with pytest.raises(HTTPException, match="401: 작성자 본인만 삭제가능 합니다."):
+        await post_service.delete_post(user_id, post_id)   
+
+@pytest.mark.unit
+@pytest.mark.posts
+async def test_get_posts(post_service, post_repository):
+    title = "test_title"
+    content = "test_content"
+    username = "test_user"
+    page = 1
+    items_per_page = 20
+    sort_option = PostSortEnum.CREATED_AT
+    user = User(username=username)
+    post_view = PostView(view_count=1)
+    posts = [Post(user_id=1, title=f"{title}_{i}", content=content, user=user, post_view=post_view) for i in range(items_per_page)]
+
+    post_repository.find_all.return_value = posts
+
+    result = await post_service.get_posts(page, items_per_page, sort_option)
+
+    assert result[0].title == "test_title_0", "게시글 제목이 반환되어야 한다."
+    assert result[0].username == "test_user", "작성자의 이름이 반환되어야 한다."
+    assert result[0].view_count == 1, "조회수가 반환되어야 한다."
+
+@pytest.mark.unit
+@pytest.mark.posts
+async def test_get_posts_deleted_user(post_service, post_repository):
+    title = "test_title"
+    content = "test_content"
+    username = "test_user"
+    page = 1
+    items_per_page = 20
+    sort_option = PostSortEnum.CREATED_AT
+    deleted_at = "2024-01-01T00:00:00"
+    user = User(username=username, deleted_at=deleted_at)
+    post_view = PostView()
+    posts = [Post(user_id=1, title=f"{title} {i}", content=content, user=user, post_view=post_view) for i in range(items_per_page)]
+
+    post_repository.find_all.return_value = posts
+
+    result = await post_service.get_posts(page, items_per_page, sort_option)
+
+    assert result[0].username == "탈퇴한 유저", "deleted_at에 값이 있는 탈퇴한 유저의 경우 '탈퇴한 유저'로 반환되어야 한다."
+
+@pytest.mark.unit
+@pytest.mark.posts
+async def test_get_post(post_service, post_repository):
+    user_id = 1
+    post_id = 1
+    title = "test_title"
+    content = "test_content"
+    username = "test_user"
+    created_at = "2024-01-01T00:00:00"
+    updated_at = ""
+    user = User(username=username)
+    post = Post(user_id=user_id, title=title, content=content, user=user, created_at=created_at, updated_at=updated_at)
+
+    post_repository.get_post_detail.return_value = post
+
+    result = await post_service.get_post(post_id)
+
+    assert result.title == "test_title", "게시글 제목이 반환되어야 한다."
+    assert result.username == "test_user", "작성자의 이름이 반환되어야 한다."
+    assert result.content == "test_content", "게시글 내용이 반환되어야 한다."
+    assert result.created_at == "2024-01-01T00:00:00", "게시글 생성일이 반환되어야 한다."
+    assert result.updated_at == "", "게시글 수정일이 반환되어야 한다."
+
+@pytest.mark.unit
+@pytest.mark.posts
+async def test_get_post_not_exist(post_service, post_repository):
+    post_id = 1
     
-# 게시글 작성
-@pytest.mark.posts
-async def test_create_post():
+    post_repository.get_post_detail.return_value = None
 
-    async with AsyncClient(base_url=BASE_URL) as ac:
-        signup_user = {
-            "username": "test_user_name",
-            "email": "test_email@test.com",
-            "password": "test_Password_1!",
-        }
-        await ac.post("/users/signup", json=signup_user)
-        login_response = await ac.post("/users/login", json={"email": signup_user["email"], "password": signup_user["password"]})
-        login_response_content = login_response.json()
-        access_token = login_response_content['access_token']
-
-        cookies = {"access_token": access_token}
-        create_post_data = {
-            "title":"test_title",
-            "content":"test_content",
-        }
-        response = await ac.post("/posts/", json=create_post_data, cookies=cookies)
-        response_content = response.json()
-        assert response.status_code == 201, "상태코드 201을 반환해야 한다"
-        assert response_content['title'] == "test_title", "제목이 일치해야 한다"
-        assert response_content['content'] == "test_content", "내용이 일치해야 한다"
-
-# 게시글 수정
-@pytest.mark.posts
-async def test_edit_post():
-    async with AsyncClient(base_url=BASE_URL) as ac:
-        signup_user = {
-            "username": "test_user_name",
-            "email": "test_email@test.com",
-            "password": "test_Password_1!",
-        }
-        await ac.post("/users/signup", json=signup_user)
-        login_response = await ac.post("/users/login", json={"email": signup_user["email"], "password": signup_user["password"]})
-        login_response_content = login_response.json()
-        access_token = login_response_content['access_token']
-        cookies = {"access_token": access_token}
-
-        create_post_data = {
-            "title":"test_title",
-            "content":"test_content",
-        }
-        create_response = await ac.post("/posts/", json=create_post_data, cookies=cookies)
-        created_content = create_response.json()
-
-        post_id = created_content['id']
-        edit_post_content = {
-            "title":"edited_test_title",
-            "content":"edited_test_content",
-        }
-
-        response = await ac.put(f"/posts/{post_id}/edit", json=edit_post_content, cookies=cookies)
-        response_content = response.json()
-
-        assert response.status_code == 200, "상태코드 200을 반환해야 한다"
-        assert response_content['title'] == "edited_test_title", "제목이 수정되어야 한다"
-        assert response_content['content'] == "edited_test_content", "내용이 수정되어야 한다"
-
-# 게시글 삭제
-@pytest.mark.posts
-async def test_delete_post():
-    async with AsyncClient(base_url=BASE_URL) as ac:
-        signup_user = {
-            "username": "test_user_name",
-            "email": "test_email@test.com",
-            "password": "test_Password_1!",
-        }
-        await ac.post("/users/signup", json=signup_user)
-        login_response = await ac.post("/users/login", json={"email": signup_user["email"], "password": signup_user["password"]})
-        login_response_content = login_response.json()
-        access_token = login_response_content['access_token']
-        cookies = {"access_token": access_token}
-
-        create_post_data = {
-            "title":"test_title",
-            "content":"test_content",
-        }
-        create_response = await ac.post("/posts/", json=create_post_data, cookies=cookies)
-        created_content = create_response.json()
-
-        post_id = created_content['id']
-        
-        response = await ac.delete(f"/posts/{post_id}")
-        assert response.status_code == 200, "상태코드 200을 반환해야 한다"
-        assert response.json()['deleted_id'] == post_id, "삭제된 게시글의 id를 반환해야 한다"
-
-# 게시글 목록
-@pytest.mark.asyncio
-@pytest.mark.posts
-async def test_get_posts():
-    async with AsyncClient(base_url=BASE_URL) as ac:
-        signup_user = {
-            "username": "test_user_name",
-            "email": "test_email@test.com",
-            "password": "test_Password_1!",
-        }
-        await ac.post("/users/signup", json=signup_user)
-        login_response = await ac.post("/users/login", json={"email": signup_user["email"], "password": signup_user["password"]})
-        login_response_content = login_response.json()
-        access_token = login_response_content['access_token']
-        cookies = {"access_token": access_token}
-
-        create_post_data = {
-            "title":"test_title_for_get_post",
-            "content":"test_content_for_get_post",
-        }
-        await ac.post("/posts/", json=create_post_data, cookies=cookies)
-
-        response = await ac.get("/posts/")
-
-        response_content = response.json()
-        assert response.status_code == 200, "상태코드 200을 반환해야 한다"
-        assert isinstance(response_content['posts'], list), "게시글 목록을 반환해야 한다"
-
-        created_at_response = await ac.get("/posts/?sort_option=created_at")
-        created_at_response_content = created_at_response.json()
-        assert isinstance(created_at_response_content['posts'], list), "게시글 목록을 반환해야 한다"
-
-        view_count_response = await ac.get("/posts/?sort_option=view_count")
-        view_count_response_content = view_count_response.json()
-        assert isinstance(view_count_response_content['posts'], list), "게시글 목록을 반환해야 한다"
-
-
-# 게시글 조회
-@pytest.mark.posts
-async def test_get_post():
-    async with AsyncClient(base_url=BASE_URL) as ac:
-        signup_user = {
-            "username": "test_user_name",
-            "email": "test_email@test.com",
-            "password": "test_Password_1!",
-        }
-        await ac.post("/users/signup", json=signup_user)
-        login_response = await ac.post("/users/login", json={"email": signup_user["email"], "password": signup_user["password"]})
-        login_response_content = login_response.json()
-        access_token = login_response_content['access_token']
-        cookies = {"access_token": access_token}
-
-        create_post_data = {
-            "title":"test_title_for_get_post",
-            "content":"test_content_for_get_post",
-        }
-        create_response = await ac.post("/posts/", json=create_post_data, cookies=cookies)
-        created_content = create_response.json()
-        post_id = created_content['id']
-
-        # 게시글 조회 테스트
-        get_post_response = await ac.get(f"/posts/{post_id}")
-        get_post_content = get_post_response.json()
-        assert get_post_response.status_code == 200, "상태코드 200을 반환해야 한다"
-        assert get_post_content['title'] == "test_title_for_get_post", "제목이 일치해야 한다"
-        assert get_post_content['content'] == "test_content_for_get_post", "내용이 일치해야 한다"
-
-        # 게시글 조회시 조회수 증가 테스트
-        check_response = await ac.get("/posts/")
-        check_response_content:dict = check_response.json()
-        filterd = list(filter(lambda post: post['id'] == post_id, check_response_content.get('posts')))
-        assert filterd[0]['view_count'] == 1, "조회수가 증가해야 한다"
-
-# https://medium.com/lseg-developer-community/getting-start-unit-test-with-pytest-for-http-rest-python-application-8bb59eae4d0d
-
-# 탈퇴한 회원이 작성한 포스트는 탈퇴한 회원이라 나와야 한다(회원삭제 구현해야 함)
+    with pytest.raises(HTTPException, match="400: 존재하지 않는 포스트입니다."):
+        await post_service.get_post(post_id)
