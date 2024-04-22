@@ -1,27 +1,28 @@
-from fastapi import Depends, HTTPException, Request, status
+from fastapi import Request, status
 from fastapi.responses import JSONResponse
-import jwt
-from users.utills import UserUtills, get_user_utills
+from src.auth.utills import JwtUtils
 
 
 async def token_validator(request: Request, call_next):
-    utills = get_user_utills()
-    headers = request.headers
+    utills = JwtUtils()
+
     cookies = request.cookies
     url = request.url.path
     docs_whitelist = ('/docs', 'redoc')
-    user_whitelist = ('/users/signup', '/users/login')
-    post_whitelist = ('/posts/')
+    post_whitelist = ('/posts')
 
+    # /posts, /users로 시작하는 url에 대해서만 토큰 검증
     if url.startswith(('/posts', '/users')):
-        if url.startswith(user_whitelist) | (url.startswith(post_whitelist) and request.method == 'GET') | (url.startswith(docs_whitelist)):
+        # /posts에 한해 GET 요청에 대해서는 토큰 검증을 하지 않음
+        # /docs에 대해서도 토큰 검증을 하지 않음
+        if (url.startswith(post_whitelist) and request.method == 'GET') | (url.startswith(docs_whitelist)):
             response = await call_next(request)
             return response
     
         if "access_token" in cookies.keys():
             access_token = cookies.get('access_token')
             access_token = access_token.replace("Bearer ", "")
-            decoded_token = decode_token(access_token)
+            decoded_token = utills.decode_token(access_token)
             request.state.user = decoded_token['data']
             response = await call_next(request)
             return response
@@ -29,15 +30,3 @@ async def token_validator(request: Request, call_next):
     else:
         response = await call_next(request)
         return response
-    
-
-def decode_token(token):
-    JWT_SECRET_KEY = 'test'
-    JWT_ALGORITHM = 'HS256'
-
-    try:
-        payload = jwt.decode(token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
-        return payload
-    except jwt.exceptions.InvalidTokenError as e:
-        e.args = ['Invalid token']
-        return e
