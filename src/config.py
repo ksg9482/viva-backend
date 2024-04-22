@@ -3,5 +3,4 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-DATABASE_URL = os.getenv("DATABASE_URL")
-BASE_URL = "http://localhost:8083"
+DATABASE_URL = "sqlite+aiosqlite:///database.db?charset=utf8mb4"
