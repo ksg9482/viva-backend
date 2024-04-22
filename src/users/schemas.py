@@ -1,9 +1,6 @@
 import re
 from typing import Optional
 from pydantic import BaseModel, Field, field_validator, EmailStr
-# from email_validator import validate_email, EmailNotValidError
-# https://docs.pydantic.dev/2.0/usage/types/string_types/
-
 
 PASSWORD_PATTERN = r"^(?=.*[a-z])(?=.*[A-Z])(?=.*[\W_]).+$" # [a-z] 소문자 검증, [A-Z] 대문자 검증, [\W] 특수문자 검증
 
@@ -20,7 +17,6 @@ class UserSignUp(BaseModel):
     @field_validator("password", mode="after")
     @classmethod
     def valid_password(cls, password: str) -> str:
-        print(password)
         if not re.match(PASSWORD_PATTERN, password):
             raise ValueError(
                 "Password must contain at least "
@@ -65,5 +61,12 @@ class UserEditResponse(BaseModel):
     username: str
     email: EmailStr
 
+class UserDelete(BaseModel):
+    password: str
+
 class UserDeleteResponse(BaseModel):
     id: int
+
+class AuthTokens(BaseModel):
+    access_token: str
+    refresh_token: str
