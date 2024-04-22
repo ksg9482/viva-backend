@@ -1,245 +1,240 @@
-from fastapi import HTTPException
+from datetime import timedelta
 import pytest
-from httpx import AsyncClient
-from config import BASE_URL
+from unittest.mock import AsyncMock, Mock, patch
+from fastapi import HTTPException
+from src.users.services import UserService
+from src.users.repository import UserRepository
+from src.users.models import RefreshToken, User
+from src.auth.utills import JwtUtils
+import src.users.dependencies as dependencies
 
-# api 테스트
+@pytest.fixture
+def user_repository():
+    user_repository = UserRepository()
+    user_repository.find_by_id = AsyncMock()
+    user_repository.find_by_email = AsyncMock()
+    user_repository.save = AsyncMock()
+    user_repository.edit_user = AsyncMock()
+    user_repository.delete_soft_user = AsyncMock()
+    user_repository.save_refresh_token = AsyncMock()
+    return user_repository
 
-# 회원 가입
+@pytest.fixture
+def user_service(user_repository):
+    return UserService(user_repository)
+
+@pytest.mark.unit
 @pytest.mark.users
-@pytest.mark.signup
-async def test_signup_ok():
-    async with AsyncClient(base_url=BASE_URL) as ac:
-        signup_user = {
-            "username":"test_user_name_signup_ok",
-            "email":"test_email_signup_ok@test.com",
-            "password":"test_Password_1!",
-        }
-        response = await ac.post("/users/signup", json=signup_user)
-        status_code = response.status_code
-        response_content = response.json()
-        assert response_content.get('password') is None, "반환된 응답에는 비밀번호가 없어야 한다"
-        assert response_content == {
-            "username":"test_user_name_signup_ok",
-            "email":"test_email_signup_ok@test.com"
-        }, "회원가입에 성공했을 때 이름, 이메일을 반환해야 한다"
-        assert status_code == 201, "회원가입에 성공했을 때 상태코드 201을 반환해야 한다"
+async def test_create_user_account(user_service, user_repository):
+    username = "test_username"
+    email = "testuser@example.com"
+    password = "test_password"
+    user = User(username=username, email=email, password=password)
 
+    user_repository.save.return_value = user
+    user_repository.find_by_email.return_value = None
 
+    result = await user_service.create_user_account(username, email, password)
+
+    assert result.username == "test_username", "사용자 이름이 반환되어야 한다."
+    assert result.email == "testuser@example.com", "이메일이 반환되어야 한다."
+    assert result.password != "test_password", "비밀번호가 해싱되어 반환되어야 한다."
+
+@pytest.mark.unit
 @pytest.mark.users
-@pytest.mark.signup
-async def test_signup_duplicate():
-    async with AsyncClient(base_url=BASE_URL) as ac:
-        signup_user = {
-            "username":"test_user_name_signup_ok",
-            "email":"test_email_signup_ok@test.com",
-            "password":"test_Password_1!",
-        }
-        response = await ac.post("/users/signup", json=signup_user)
-        status_code = response.status_code
-        response_content = response.json()
-        assert status_code == 400, "중복 가입일 경우 상태코드 400을 반환해야 한다"
-        print(response_content)
-        assert response_content.get('detail') == '이미 가입된 사용자입니다.', "중복 가입일 경우 이미 가입된 사용자임을 밝히는 예외가 발생해야 한다."
+async def test_create_user_duplicate_account(user_service, user_repository):
+    username = "test_username"
+    email = "testuser@example.com"
+    password = "test_password"
+    user = User(username=username, email=email, password=password)
 
+    user_repository.save.return_value = user
+    user_repository.find_by_email.return_value = user
 
+    with pytest.raises(HTTPException, match='이미 가입된 사용자입니다.'):
+        await user_service.create_user_account(username, email, password)
+
+@pytest.mark.unit
 @pytest.mark.users
-@pytest.mark.signup
-async def test_signup_password_length():
-    async with AsyncClient(base_url=BASE_URL) as ac:
-        signup_user = {
-            "username":"test_user_name_signup_password",
-            "email":"test_email_signup_password@test.com",
-            "password":"aB!4567",
-        }
-        response = await ac.post("/users/signup", json=signup_user)
-        status_code = response.status_code
-        response_content = response.json()
-        assert status_code == 422 # validation error
-        assert response_content['detail'][0]['msg'] == 'String should have at least 8 characters', "비밀번호는 8자 미만이면 에러가 발생해야 한다."
+async def test_login(user_service, user_repository):
+    email = "testuser@example.com"
+    password = "test_password"
+    user = User(email=email, password=password)
 
+    user_repository.find_by_email.return_value = user
+    user_service.valid_password = Mock(return_value=True)
+    user_service.utills.encode_access_token = Mock(return_value="access_token")
+    user_service.utills.encode_refresh_token = Mock(return_value="refresh_token")
+
+    result = await user_service.login(email, password)
+
+    user_repository.find_by_email.assert_called_once_with(email)
+    assert result.access_token == "access_token", "access_token이 반환되어야 한다."
+    assert result.refresh_token == "refresh_token", "refresh_token이 반환되어야 한다."
+
+@pytest.mark.unit
 @pytest.mark.users
-@pytest.mark.signup
-async def test_signup_password_lowercase():
-    async with AsyncClient(base_url=BASE_URL) as ac:
-        signup_user = {
-            "username":"test_user_name_signup_lowercase",
-            "email":"test_email_signup_lowercase@test.com",
-            "password":"AB!45678",
-        }
-        response = await ac.post("/users/signup", json=signup_user)
-        status_code = response.status_code
-        response_content = response.json()
-        assert status_code == 422
-        assert response_content['detail'][0]['msg'] == 'Value error, Password must contain at least one lower character, one upper character, one special symbol', "비밀번호는 소문자를 하나 이상 포함하지 않으면 에러가 발생해야 한다."
+async def test_login_not_exist_user(user_service, user_repository):
+    email = "testuser@example.com"
+    password = "test_password"
 
+    user_repository.find_by_email.return_value = None
+    with pytest.raises(HTTPException, match='존재하지 않는 사용자입니다.'):
+        await user_service.login(email, password)
+
+@pytest.mark.unit
 @pytest.mark.users
-@pytest.mark.signup
-async def test_signup_password_uppercase():
-    async with AsyncClient(base_url=BASE_URL) as ac:
-        signup_user = {
-            "username":"test_user_name_signup_upppercase",
-            "email":"test_email_signup_upppercase@test.com",
-            "password":"ab!45678",
-        }
-        response = await ac.post("/users/signup", json=signup_user)
-        status_code = response.status_code
-        response_content = response.json()
-        assert status_code == 422
-        assert response_content['detail'][0]['msg'] == 'Value error, Password must contain at least one lower character, one upper character, one special symbol', "비밀번호는 대문자를 하나 이상 포함하지 않으면 에러가 발생해야 한다."
+async def test_login_not_invalid_password(user_service, user_repository):
+    email = "testuser@example.com"
+    password = "test_password"
+    hashed_password = "hashedpassword"
+    user = User(email=email, password=hashed_password)
 
+    user_repository.find_by_email.return_value = user
+    user_service.valid_password = Mock(return_value=False)
+
+    with pytest.raises(HTTPException, match='잘못된 비밀번호 입니다.'):
+        await user_service.login(email, password)
+
+@pytest.mark.unit
 @pytest.mark.users
-@pytest.mark.signup
-async def test_signup_password_special():
-    async with AsyncClient(base_url=BASE_URL) as ac:
-        signup_user = {
-            "username":"test_user_name_special",
-            "email":"test_email_special@test.com",
-            "password":"abc45678",
-        }
-        response = await ac.post("/users/signup", json=signup_user)
-        status_code = response.status_code
-        response_content = response.json()
-        assert status_code == 422
-        assert response_content['detail'][0]['msg'] == 'Value error, Password must contain at least one lower character, one upper character, one special symbol', "비밀번호는 특수문자를 하나 이상 포함하지 않으면 에러가 발생해야 한다."
+async def test_edit_user(user_service, user_repository):
+    id = 1
+    password = "old_password"
+    username = "updated_username"
+    new_password = "updated_password"
+    user = User(id=id, username=username, password=password)
 
-# 로그인
+    user_service.get_user = AsyncMock(return_value=user)
+    user_service.valid_password = Mock(return_value=True)
+    user_repository.edit_user.return_value = user
+
+    result = await user_service.edit_user(id, password, username, new_password)
+    assert result.username == "updated_username", "사용자 이름이 업데이트 되어야 한다."
+    assert result.password != "updated_password" , "업데이트 된 비밀번호가 해싱되어 반환되어야 한다."
+
+@pytest.mark.unit
 @pytest.mark.users
-@pytest.mark.login
-async def test_login_ok():
-    async with AsyncClient(base_url=BASE_URL) as ac:
-        signup_user = {
-            "username":"test_user_name",
-            "email":"test_email@test.com",
-            "password":"test_Password_1!",
-        }
-        await ac.post("/users/signup", json=signup_user)
+async def test_edit_user_invalid_password(user_service):
+    id = 1
+    password = "old_password"
+    username = "updated_username"
+    new_password = "updated_password"
+    user = User(id=id, username=username, password=password)
 
-        login_user = {
-            "email": "test_email@test.com", 
-            "password": "test_Password_1!"
-        }
+    user_service.get_user = AsyncMock(return_value=user)
+    user_service.valid_password = Mock(return_value=False)
 
-        response = await ac.post("/users/login", json=login_user)
-        assert response.status_code == 200, "상태코드 200을 반환해야 한다"
-        assert isinstance(response.json()['access_token'], str), "access_token은 문자열이어야 한다."
-        assert isinstance(response.json()['refresh_token'], str), "refresh_token은 문자열이어야 한다."
+    with pytest.raises(HTTPException, match='401: 잘못된 비밀번호 입니다.'):
+        await user_service.edit_user(id, password, username, new_password)
 
-        # 유효하지 않은 사용자 로그인
-        
-
+@pytest.mark.unit
 @pytest.mark.users
-@pytest.mark.login
-async def test_login_email():
-    async with AsyncClient(base_url=BASE_URL) as ac:
-        login_user = {
-            "email": "invalid_password", 
-            "password": "test_Password_1!"
-        }
-        # with pytest.raises(HTTPException):
-        response = await ac.post("/users/login", json=login_user)
-        assert response.status_code == 422, "이메일 형식에 맞지 않은 이메일을 입력하면 상태코드 422를 반환해야 한다."
-        assert response.json()['detail'][0]['msg'] == 'value is not a valid email address: The email address is not valid. It must have exactly one @-sign.',"이메일 형식에 맞지 않은 이메일을 입력하면 예외가 발생해야 한다."
+async def test_delete_user(user_service, user_repository):
+    id = 1
+    password = "password"
+    username = "username"
+    user = User(id=id, username=username, password=password)
 
+    user_service.get_user = AsyncMock(return_value=user)
+    user_service.valid_password = Mock(return_value=True)
+    user_repository.delete_soft_user.return_value = user
+
+    result = await user_service.delete_user(id, password)
+
+    assert result.username == "username", "삭제된 사용자 이름이 반환되어야 한다."
+    assert result.deleted_at is not None, "삭제된 사용자의 삭제 시간이 기록되어야 한다."
+
+@pytest.mark.unit
 @pytest.mark.users
-@pytest.mark.login
-async def test_login_password():
-    async with AsyncClient(base_url=BASE_URL) as ac:
-        login_user = {
-            "email": "test_email@test.com", 
-            "password": "invalid_password"
-        }
-        # with pytest.raises(HTTPException):
-        response = await ac.post("/users/login", json=login_user)
-        assert response.status_code == 401, "유효하지 않은 사용자 로그인 정보를 제공하면 상태 코드 401을 반환해야 한다."
-        assert response.json()['detail'] == '잘못된 비밀번호 입니다.', "잘못된 비밀번호를 입력하면 예외가 발생해야 한다."
+async def test_delete_user_not_exist_user(user_service, user_repository):
+    id = 1
+    password = "password"
 
+    user_repository.find_by_id.return_value = None
 
-# 회원정보 수정
+    with pytest.raises(HTTPException, match='400: 존재하지 않는 사용자입니다.'):
+        await user_service.delete_user(id, password)
+
+@pytest.mark.unit
 @pytest.mark.users
-@pytest.mark.user_edit
-async def test_user_edit_ok():
-    async with AsyncClient(base_url=BASE_URL) as ac:
-        signup_user = {
-            "username":"test_user_name_edit_ok",
-            "email":"test_email_edit_ok@test.com",
-            "password":"test_Password_1!",
-        }
-        await ac.post("/users/signup", json=signup_user)
-        login_response =await ac.post("/users/login", json={"email": signup_user["email"], "password": signup_user["password"]})
-        login_response_content = login_response.json()
-        access_token = login_response_content['access_token']
-        cookies = {"access_token": access_token}
-        user_id = login_response_content.get('id')
+async def test_delete_user_invalid_password(user_service):
+    id = 1
+    password = "old_password"
+    username = "updated_username"
+    new_password = "updated_password"
+    user = User(id=id, username=username, password=password)
 
-        user_edit_content = {
-            "password":"test_Password_1!",
-            "username":"test_user_name_edit_ok",
-            "new_password":"test_Password_2!"
-        }
-        response = await ac.put(f"/users/edit", json=user_edit_content, cookies=cookies)
-        
-        assert response.json() == {
-            "email":"test_email_edit_ok@test.com", # id가 좋을까??
-            "username":"test_user_name_edit_ok",
-        }, "수정된 정보를 반환해야 한다."
-        assert response.status_code == 200, "상태코드 200을 반환해야 한다"
+    user_service.get_user = AsyncMock(return_value=user)
+    user_service.valid_password = Mock(return_value=False)
 
+    with pytest.raises(HTTPException, match='401: 잘못된 비밀번호 입니다.'):
+        await user_service.edit_user(id, password, username, new_password)
 
-# @pytest.mark.users
-# @pytest.mark.user_edit
-# async def test_user_edit_id():
-#     async with AsyncClient(base_url=BASE_URL) as ac:
-#         signup_user = {
-#             "username":"test_user_name",
-#             "email":"test_email@test.com",
-#             "password":"test_Password_1!",
-#         }
-#         await ac.post("/users/signup", json=signup_user)
-#         login_response =await ac.post("/users/login", json={"email": signup_user["email"], "password": signup_user["password"]})
-#         login_response_content = login_response.json()
-#         access_token = login_response_content['access_token']
-#         cookies = {"access_token": access_token}
-#         user_id = 9999
-
-#         user_edit_content = {
-#             "password":"test_Password_1!",
-#             "username":"test_user_name",
-#             "new_password":"test_Password_2!"
-#         }
-
-#         response = await ac.put(f"/users/edit", json=user_edit_content, cookies=cookies)
-#         assert response.json()['detail'] == '유저 본인의 정보만 수정할 수 있습니다.', "가입한 아이디로 수정해야 한다."
-#         assert response.status_code == 401, "상태코드 401을 반환해야 한다"
-
-
+@pytest.mark.unit
 @pytest.mark.users
-@pytest.mark.user_edit
-async def test_user_edit_short_password():
-    async with AsyncClient(base_url=BASE_URL) as ac:
-        signup_user = {
-            "username":"test_user_name_edit_password",
-            "email":"test_email_edit_password@test.com",
-            "password":"test_Password_1!",
-        }
-        await ac.post("/users/signup", json=signup_user)
-        login_response =await ac.post("/users/login", json={"email": signup_user["email"], "password": signup_user["password"]})
-        login_response_content = login_response.json()
-        print(login_response_content)
-        access_token = login_response_content['access_token']
-        cookies = {"access_token": access_token}
-        user_id = login_response_content.get('id')
+async def test_get_user(user_service, user_repository):
+    id = 1
+    password = "password"
+    username = "username"
+    user = User(id=id, username=username, password=password)
+    user_repository.find_by_id = AsyncMock(return_value=user)
 
-        user_edit_content = {
-            "password":"test_Password_1!",
-            "username":"test_user_name_edit_password",
-            "new_password":"1234567"
-        }
-        response = await ac.put(f"/users/edit", json=user_edit_content, cookies=cookies)
-        response_content = response.json()
+    result = await user_service.get_user(id)
 
-        assert response_content['detail'][0]['msg'] == 'String should have at least 8 characters', "비밀번호는 8자 미만이면 에러가 발생해야 한다."
-        # assert response_content['detail'][0]['msg'] == 'Value error, Password must contain at least one lower character, one upper character, one special symbol', "변경할 비밀번호가 8자 이상, 대문자 1개 이상, 소문자 1개 이상, 특수문자 1개 이상을 준수하지 않으면 에러가 발생한다."
-        assert response.status_code == 422, "상태코드 422을 반환해야 한다"
+    assert result.username == "username", "사용자 이름이 반환되어야 한다."
 
-# 이하 비밀번호 로직
+@pytest.mark.unit
+@pytest.mark.users
+async def test_get_user_not_exist_user(user_service, user_repository):
+    id = 1
+    user_repository.find_by_id = AsyncMock(return_value=None)
+
+    with pytest.raises(HTTPException, match='400: 존재하지 않는 사용자입니다.'):
+        await user_service.get_user(id)
+
+@pytest.mark.unit
+@pytest.mark.users
+async def test_jwt_refresh(user_service, user_repository):
+    access_token = "access_token"
+    refresh_token = "refresh_token"
+    user_id = 1
+    email = "testuser@example.com"
+    username = "test_username"
+    user = User(id=user_id, email=email, username=username)
+    refresh_token = RefreshToken(user_id=user_id, token=refresh_token)
+
+    user_service.utills.encode_access_token = Mock(return_value="new_access_token")
+    user_service.utills.encode_refresh_token = Mock(return_value="new_refresh_token")
+    user_service.utills.decode_token = Mock(return_value={"data": {"id": user_id}})
+    user_repository.find_by_id.return_value = user
+    user_repository.save_refresh_token.return_value = refresh_token
+
+    result = await user_service.jwt_refresh(access_token, refresh_token)
+
+    assert result["access_token"] == "new_access_token", "새로운 access_token이 반환되어야 한다."
+    assert result["refresh_token"] == "new_refresh_token", "새로운 refresh_token이 반환되어야 한다."
+
+@pytest.mark.unit
+@pytest.mark.users
+async def test_jwt_refresh_invalid_token(user_service):
+    access_token = "invalid_access_token"
+    refresh_token = "invalid_refresh_token"
+
+    user_service.utills.decode_token.return_value = None
+
+    with pytest.raises(HTTPException, match="401: 유효하지 않은 토큰입니다."):
+        await user_service.jwt_refresh(access_token, refresh_token)
+
+@pytest.mark.unit
+async def test_jwt_refresh_not_exist_user(user_service, user_repository):
+    user_id = 1
+
+    access_token = "access_token"
+    refresh_token = "refresh_token"
+
+    user_service.utills.decode_token = Mock(return_value={"data": {"id": user_id}})
+    user_repository.find_by_id.return_value = None
+
+    with pytest.raises(HTTPException, match="400: 존재하지 않는 사용자입니다."):
+        await user_service.jwt_refresh(access_token, refresh_token)
