@@ -1,16 +1,27 @@
-from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.orm import sessionmaker, as_declarative, declared_attr
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
-from sqlalchemy.ext.declarative import declarative_base
+from src.config import DATABASE_URL
 
-from config import DATABASE_URL
-
-engine = create_async_engine(DATABASE_URL, echo=True) # echo -> 내부에서 어떻게 동작하는지 확인용. 디버깅
+engine = create_async_engine(DATABASE_URL, echo=True)
 
 AsyncSessionLocal = sessionmaker(
     autocommit=False,
     autoflush=False, 
     bind=engine,
-    class_=AsyncSession
+    class_=AsyncSession,
     )
 
-Base = declarative_base()
+
+@as_declarative()
+class Base:
+    @declared_attr
+    def __tablename__(cls) -> str:
+        return cls.__tablename__.lower()
+
+    @classmethod
+    async def get_db(cls):
+        async with AsyncSessionLocal() as session:
+            yield session
+
+def get_Base():
+    return Base
