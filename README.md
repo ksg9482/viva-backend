@@ -28,3 +28,4 @@ DB연결시 charset(charset=utf8mb4)을 설정하여 이모지가 정상적으�
 
 ### 유닛테스트
 유닛테스트는 비즈니스 로직을 위임한 Service 레이어에 대해 작성 했습니다. Repository와 일부 함수를 Mocking하여 Service 메서드를 최대한 독립적으로 테스트 할 수 있게 구성했으나 내부에서 동작하는 함수가 Service 메서드의 중요한 부분을 차지할 경우 Mocking하지 않고 변화가 반영된 값을 검증하도록 했습니다.
+* pytest 이용
